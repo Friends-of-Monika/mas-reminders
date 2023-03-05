@@ -16,3 +16,4 @@ mkdir -p "$mod"
 cp -r "$dir/mod"/* "$mod"
 
 (cd "$temp" || exit 1; find game | zip -9@q "$build/$package-$version.zip" && rm -rf "$temp")
+(cd "$dir/spritepacks" || exit 1; find | zip -9@q "$build/spritepacks.zip")

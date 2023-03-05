@@ -24,3 +24,5 @@ Copy-Item -Recurse $Dir\mod $Mod
 
 Compress-Archive -Update -Path $Temp\game -DestinationPath $Build\$Package-$Version.zip
 Remove-Item -Recurse $Temp
+
+Compress-Archive -Update -Path $Dir\spritepacks -DestinationPath $Build\spritepacks.zip
