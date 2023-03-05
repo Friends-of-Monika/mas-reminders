@@ -162,7 +162,7 @@ label trm_topic_reminder_create(recurring):
             jump .set_note
 
     if recurring:
-        $ quip = "Okay! Now pick when should how often should remind you about it."
+        $ quip = "Okay! Now pick how often should remind you about it."
     else:
         $ quip = "Okay! Now pick when should I remind you about it."
     m 3eub "[quip]"
