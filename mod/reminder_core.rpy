@@ -310,7 +310,6 @@ init 10 python in _trm_reminder:
 
         return reminder
 
-
     def __extend_reminder(reminder):
         """
         Extends the provided reminder (but does not modify queue or arm
@@ -331,24 +330,13 @@ init 10 python in _trm_reminder:
         if reminder.interval is None:
             raise ValueError("reminder has no interval")
 
-        # NOTE: *IDEALLY* this has to be done math way without any loops
-        #  so no CPU cycles wasted on such a simple task.
-
-        # now_ts = __dt_timestamp(datetime.datetime.now())
-        # trigger_ts = __dt_timestamp(reminder.trigger_at)
-
         now = datetime.datetime.now()
 
-        # if trigger_ts > now_ts:
         if reminder.trigger_at > now:
             return
 
-        while reminder.trigger_at < now:
-            reminder.trigger_at += reminder.interval
-
-        # diff = now_ts - trigger_ts
-        # iters = math.ceil(diff / int(reminder.interval.total_seconds()))
-        # reminder.trigger_at += reminder.interval * iters
+        elapsed_intervals = (now - reminder.trigger_at) // reminder.interval
+        reminder.trigger_at += (elapsed_intervals + 1) * reminder.interval
 
 
     def __sort_queue():
