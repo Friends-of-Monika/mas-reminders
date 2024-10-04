@@ -1,7 +1,6 @@
 define persistent._trm_queue = list()
 
-
-init 10 python in _trm_reminder:
+init 10 python in trm_reminder_api:
 
     import store
     from store import persistent, mas_getEV, EV_ACT_QUEUE
@@ -23,7 +22,7 @@ init 10 python in _trm_reminder:
         """
 
         def __init__(
-            self, trigger_at, target_evl, key, prompt,
+            self, trigger_at, target_evl, key,
             interval=None, grace_period=None, data=None,
             delegate_evl="trm_reminder_delegate", delegate_act=None
         ):
@@ -43,9 +42,6 @@ init 10 python in _trm_reminder:
                 key -> str:
                     Unique key used to distinguish two reminders from each
                     other.
-
-                prompt -> str:
-                    Prompt of this Reminder, user's note attached to it.
 
                 interval -> datetime.timedelta or None, default None:
                     Interval to set for this recurring Reminder. If None, then
@@ -77,7 +73,6 @@ init 10 python in _trm_reminder:
                 delegate_act = EV_ACT_QUEUE
 
             self.key = key
-            self.prompt = prompt
             self.trigger_at = trigger_at
             self.target_evl = target_evl
 
@@ -158,7 +153,6 @@ init 10 python in _trm_reminder:
                 trigger_at=self.trigger_at,
                 target_evl=self.target_evl,
                 key=self.key,
-                prompt=self.prompt,
                 interval=self.interval,
                 grace_period=self.grace_period,
                 data=self.data,
@@ -216,6 +210,20 @@ init 10 python in _trm_reminder:
         return view
 
 
+    def get_reminder(query):
+        try:
+            search_list = list(map(lambda it: it.key, queue))
+            return search_list.index(query)
+        except ValueError as e:
+            return None
+
+
+    def is_reminder_queued(query):
+        if isinstance(query, str):
+            return get_reminder(query) is not None
+        return query in map(lambda it: it.key, queue)
+
+
     def queue_reminder(reminder):
         """
         Appends reminder to the queue and sorts it.
@@ -223,7 +231,14 @@ init 10 python in _trm_reminder:
         IN:
             reminder -> Reminder:
                 Reminder object to add to queue.
+
+        RAISES:
+            KeyError:
+                When reminder with the same key is already queued.
         """
+
+        if self.is_reminder_queued(reminder.key):
+            raise KeyError("Reminder with key {0!r} is already queued.".format(reminder.key))
 
         queue.append(reminder)
         __sort_queue()
@@ -247,15 +262,14 @@ init 10 python in _trm_reminder:
                 None if lookup failed.
         """
 
-        search_list = queue
+        if isinstance(query, unicode):
+            reminder = get_reminder(query)
+            if reminder is None:
+                return None
+        else:
+            reminder = query
 
-        if isinstance(query, str):
-            search_list = list(map(lambda it: it.key, queue))
-
-        try:
-            return pop_reminder(search_list.index(query), remove=True)
-        except ValueError as e:
-            return None
+        return pop_reminder(reminder, remove=True)
 
 
     def pop_reminder(index=None, remove=False):
@@ -265,7 +279,7 @@ init 10 python in _trm_reminder:
         reminder is before due.
 
         IN:
-            index -> int or None, default None:
+            index -> int, Reminder or None, default None:
                 Index of reminder to remove or None to remove next.
 
             remove -> bool, default False:
@@ -281,10 +295,15 @@ init 10 python in _trm_reminder:
             ValueError:
                 When queue is empty or when next (or specified) reminder is
                 before due.
+
+            IndexError:
+                When index is out of range or if provided Reminder is not queued.
         """
 
         if index is None:
             index = 0
+        elif isinstance(index, Reminder):
+            index = get_reminder(index.key)
 
         if len(queue) == 0:
             raise ValueError("queue is empty")
@@ -335,8 +354,8 @@ init 10 python in _trm_reminder:
         if reminder.trigger_at > now:
             return
 
-        elapsed_intervals = (now - reminder.trigger_at) // reminder.interval
-        reminder.trigger_at += (elapsed_intervals + 1) * reminder.interval
+        elapsed_intervals = (now - reminder.trigger_at).total_seconds() // reminder.interval.total_seconds()
+        reminder.trigger_at += datetime.timedelta(seconds=((elapsed_intervals + 1) * reminder.interval.total_seconds()))
 
 
     def __sort_queue():
@@ -364,7 +383,7 @@ init 10 python in _trm_reminder:
 
         global queue
         queue = list()
-        for rem_dict in persistent._trm_queue:
+        for rem_dict in persistent._trm_reminder_queue:
             queue.append(Reminder.from_dict(rem_dict))
 
 
@@ -374,9 +393,9 @@ init 10 python in _trm_reminder:
         persistent.
         """
 
-        persistent._trm_queue = list()
+        persistent._trm_reminder_queue = list()
         for rem in queue:
-            persistent._trm_queue.append(rem.to_dict())
+            persistent._trm_reminder_queue.append(rem.to_dict())
 
 
     def __arm_reminder_delegate(reminder):
@@ -385,7 +404,6 @@ init 10 python in _trm_reminder:
         the delegate event:
 
             * start date (reminder trigger timestamp)
-            * end date (trigger timestamp + trigger grace period if any)
             * action (reminder delegate action)
 
         Custom delegate event authors must keep that in mind.
@@ -397,8 +415,6 @@ init 10 python in _trm_reminder:
 
         ev = mas_getEV(reminder.delegate_evl)
         ev.start_date = reminder.trigger_at
-        if reminder.grace_period is not None:
-            ev.end_date = reminder.trigger_at + reminder.grace_period
         ev.action = reminder.delegate_act
 
 
@@ -408,7 +424,6 @@ init 10 python in _trm_reminder:
         attributes of the delegate event:
 
             * start date
-            * end date
             * action
 
         Custom delegate event authors must keep that in mind.
@@ -420,7 +435,6 @@ init 10 python in _trm_reminder:
 
         ev = mas_getEV(reminder.delegate_evl)
         ev.start_date = None
-        ev.end_date = None
         ev.action = None
 
 
@@ -455,7 +469,7 @@ init 5 python:
     )
 
 label trm_reminder_delegate:
-    $ reminder = store._trm_reminder.pop_reminder()
+    $ reminder = store.trm_reminder_api.pop_reminder()
     if reminder.due:
         # If this reminder is past trigger time but within grace period
         # or doesn't have one, queue it. Else silently drop.
